@@ -75,7 +75,6 @@ for i = 99%1:99
     end
     result = reshape(D,r,c);
     result = hyperNormalize(result);
-%     [fpr3, tpr3,thre3, auc3, axujing3] = myPlot3DROC(map,result);
 %     a3_Result(i,1) = auc3;
 %     a3_Result(i,2) = axujing3;
 end
@@ -88,7 +87,6 @@ for k = 1:19%100
     end
     result_3 = omega.*result;
     output_result = hyperNormalize(result_3);
-%     [fpr3, tpr3,thre3, auc3, axujing3] = myPlot3DROC(map,output_result);
 %     a3_Result(k,1) = auc3;
 %     a3_Result(k,2) = axujing3;
 end
@@ -107,5 +105,4 @@ end
 % auc7 = max(a7_Result);
 result = A./(A+exp(-result_i.*Pred_CM));
 figure,imagesc(result),axis image,axis off;
-[fpr3, tpr3,thre3, auc3, axujing3] = myPlot3DROC(map,result);
 % save('.Results\result.mat','result');
