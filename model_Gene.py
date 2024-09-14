@@ -1,12 +1,3 @@
-# Characterization of Background-Anomaly Separability With Generative Adversarial Network for Hyperspectral Anomaly Detection, Version 1.0
-# Copyright(c) 2024
-# All Rights Reserved.
-#
-#----------------------------------------------------------------------
-#
-# This is an implementation of the algorithm for Characterization of Background-Anomaly Separability With Generative Adversarial Network for Hyperspectral Anomaly Detection
-#Zhong J, **, et al. "Characterization of background-anomaly separability with generative adversarial network for hyperspectral anomaly detection." 
-#IEEE Transactions on Geoscience and Remote Sensing 59.7 (2020): 6017-6028.
 import tensorflow as tf
 import numpy as np
 import datetime
@@ -16,7 +7,6 @@ import scipy.io as scio
 from matplotlib import gridspec
 from scipy import misc
 from scipy.io import loadmat
-#import cv2
 import sys
 import numpy as np
 import json
@@ -26,9 +16,13 @@ bkg_img = loadmat('./Input/HYDICE/allbkg_cj9.mat')
 data_1 = bkg_img['allbkg_cj9']
 data = data_1
 
-ano_img = loadmat('./Input/HYDICE/target_cj.mat')
-data_a = ano_img['target_cj']
-data_anom = data_a
+tgt_img = loadmat('./Input/HYDICE/target_cj.mat')
+data_a = tgt_img['target_cj']
+data_tgt = data_a
+
+d_img = loadmat('./Data/HYDICE_data.mat')
+ori_d = d_img['d']
+data_d = ori_d
 
 input_dim = data.shape[1]
 n_l1 = 500
@@ -36,7 +30,8 @@ n_l2 = 500
 z_dim = 20
 
 batch_size = data.shape[0]
-batch_size_1 = data_anom.shape[0]
+batch_size_1 = data_tgt.shape[0]
+batch_size_2 = data_d.shape[0]
 n_epochs = 2000
 learning_rate = 1e-4
 beta1 = 0.9
@@ -46,6 +41,7 @@ path = './Train/Results/Spectral/Saved_models/'
 x_input = tf.placeholder(dtype=tf.float32, shape=[batch_size, input_dim], name='Input')
 x_target = tf.placeholder(dtype=tf.float32, shape=[batch_size, input_dim], name='Target')
 a_target = tf.placeholder(dtype=tf.float32, shape=[batch_size_1, input_dim], name='Anomaly')
+d_target = tf.placeholder(dtype=tf.float32, shape=[batch_size_2, input_dim], name='d')
 real_distribution = tf.placeholder(dtype=tf.float32, shape=[batch_size, z_dim], name='Real_distribution')
 real_distribution_1 = tf.placeholder(dtype=tf.float32, shape=[batch_size, input_dim], name='Real_distribution_1')
 decoder_input = tf.placeholder(dtype=tf.float32, shape=[1, z_dim], name='Decoder_input')
@@ -106,7 +102,7 @@ def generate_image_grid(sess, op):
 def dense(x, n1, n2, name):
     
    
-    with tf.variable_scope(name, reuse=None):
+    with tf.variable_scope(name, reuse=True):
         
         weights = tf.get_variable("weights", shape=[n1, n2],
                                   initializer=tf.random_normal_initializer(mean=0., stddev=0.01))
@@ -124,7 +120,7 @@ def LeakyRelu(x, leak=0.2, name="LeakyRelu"):
          f2 = 0.5 * (1 - leak)
          return f1 * x + f2 * tf.abs(x)
 
-def encoder(x, reuse=False):
+def encoder(x, reuse=True):
     if reuse:
         
         tf.get_variable_scope().reuse_variables()
@@ -143,7 +139,7 @@ def encoder(x, reuse=False):
         return latent_variable,e_weights
 
 
-def decoder(x, reuse=False):
+def decoder(x, reuse=True):
     if reuse:
         tf.get_variable_scope().reuse_variables()
     with tf.name_scope('Decoder'):
@@ -163,7 +159,7 @@ def decoder(x, reuse=False):
         return output,d_weights,d_bias
 
 
-def discriminator(x, reuse=False):
+def discriminator(x, reuse=True):
     
     if reuse:
         tf.get_variable_scope().reuse_variables()
@@ -175,7 +171,7 @@ def discriminator(x, reuse=False):
         output, _ , _ = dense(dc_den1, n_l1, 1, name='dc_output')
         return output
 
-def discriminator_1(x, reuse=False):
+def discriminator_1(x, reuse=True):
     
     if reuse:
         tf.get_variable_scope().reuse_variables()
@@ -187,22 +183,8 @@ def discriminator_1(x, reuse=False):
         output, _ , _ = dense(dc_den1, n_l1, 1, name='da_output')
         return output
 
-def SAD(x,y,reuse = False):
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
-    with tf.name_scope('SAD'):
-        x = tf.reshape(x,[1,data.shape[0]*data.shape[1]])
-        y = tf.reshape(y,[data.shape[0]*data.shape[1],1])
-        A = tf.matmul(x,y)
-        A = tf.diag_part(A)
-        B = tf.norm(x,ord = 'euclidean',axis = -1)
-        C = tf.norm(y,ord = 'euclidean',axis = 0)
-        defen = tf.div(A,B*C)
-        return defen
-
 def train(train_model=True):
-    defen = tf.Variable([0],name = 'defen',dtype=tf.float32)
-    
+
     with tf.variable_scope(tf.get_variable_scope()):
         encoder_output, e_weights_output = encoder(x_input)
         decoder_output,d_weights,d_bias = decoder(encoder_output)
@@ -215,9 +197,8 @@ def train(train_model=True):
         d_real_1 = discriminator_1(real_distribution_1)
         d_fake_1 = discriminator_1(decoder_output, reuse=True)
 
-    # Autoencoder loss
-    autoencoder_loss = tf.reduce_mean(tf.square(x_target - decoder_output))-tf.reduce_mean(tf.square(tf.reduce_mean(a_target) - 0.025*tf.reduce_mean(decoder_output)))
-    # Discrimminator Loss
+    autoencoder_loss = tf.reduce_mean(tf.square(x_target - decoder_output))-tf.reduce_mean(tf.square(tf.reduce_mean(a_target) - 0.025*tf.reduce_mean(decoder_output)))-tf.reduce_mean(tf.square(tf.reduce_mean(d_target) - 0.025*tf.reduce_mean(decoder_output)))
+
     dc_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_real), logits=d_real))
     dc_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(d_fake), logits=d_fake))
     dc_loss = dc_loss_fake + dc_loss_real
@@ -225,7 +206,7 @@ def train(train_model=True):
     da_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_real_1), logits=d_real_1))
     da_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(d_fake_1), logits=d_fake_1))
     da_loss = da_loss_fake + da_loss_real
-    # Generator loss
+
     generator_loss = tf.reduce_mean(
         tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_fake), logits=d_fake))
 
@@ -233,21 +214,20 @@ def train(train_model=True):
     dc_var = [var for var in all_variables if 'dc_' in var.name]
     en_var = [var for var in all_variables if 'e_' in var.name]
     da_var = [var for var in all_variables if 'da_' in var.name]
-    # Optimizers                                     
+
     autoencoder_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(autoencoder_loss, var_list=en_var)
     discriminator_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(dc_loss, var_list=dc_var)
     discriminator_1_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(da_loss, var_list=da_var)
     generator_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(generator_loss, var_list=en_var)
 
     init = tf.global_variables_initializer()
-    # Saving the model
+
     saver = tf.train.Saver(max_to_keep=100)
     step = 0
     with tf.Session() as sess:
         if train_model:
             tensorboard_path, saved_model_path, log_path,feature_path,output_img_path= form_results()
             sess.run(init)
-            writer = tf.summary.FileWriter(logdir=tensorboard_path, graph=sess.graph)
             
             for i in range(n_epochs):
                 n_batches = 1
@@ -255,14 +235,13 @@ def train(train_model=True):
                 for b in range(n_batches):
                     z_real_dist = np.random.randn(batch_size, z_dim) * 5.
                     
-                    batch_xr = data
                     batch_x = data
-                    batch_a = data_anom
-                    sess.run(autoencoder_optimizer,feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a})
+                    batch_a = data_tgt
+                    batch_d = data_d
+                    sess.run(autoencoder_optimizer,feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a, d_target: batch_d})
                     sess.run(discriminator_optimizer,
                                 feed_dict={x_input: batch_x, x_target: batch_x, real_distribution: z_real_dist})
                     sess.run(generator_optimizer,feed_dict={x_input: batch_x, x_target: batch_x})
-                    e_output = sess.run(encoder_output,feed_dict={x_input: batch_x})
                     d_output = sess.run(decoder_output,feed_dict={x_input: batch_x})
                     sess.run(discriminator_1_optimizer,
                                 feed_dict={x_input: d_output, real_distribution_1: batch_x})
@@ -271,7 +250,8 @@ def train(train_model=True):
 
                         a_loss, d_loss, g_loss ,d_1_loss= sess.run(
                             [autoencoder_loss, dc_loss, generator_loss, da_loss],
-                            feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a, real_distribution: z_real_dist, real_distribution_1: batch_x})
+                            #feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a, real_distribution: z_real_dist, real_distribution_1: batch_x})
+                            feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a, real_distribution: z_real_dist, real_distribution_1: batch_x, d_target: batch_d})
                     print("Epoch: {}, iteration: {}".format(i, b))
                     print("Autoencoder Loss: {}".format(a_loss))
                     print("Discriminator Loss: {}".format(d_loss))
@@ -285,8 +265,7 @@ def train(train_model=True):
                         log.write("Generator Loss: {}\n".format(g_loss))
                         
                     np.set_printoptions(threshold=np.inf)
-                    encoder_path = './Train/Results/Spectral/feature/HYDICE'
-                    decoder_path = './Train/Results/Spectral/output_img/HYDICE'
+
                    
                 step += 1
                 if i % 100 == 0:
@@ -297,7 +276,6 @@ def train(train_model=True):
             saver.restore(sess, save_path=tf.train.latest_checkpoint("./Train/Results/Spectral/Saved_models/"))
             output_y = sess.run(decoder_output,feed_dict={x_input: data})
             
-            with open (test_path+'test_output.txt','a') as h:
-                np.savetxt(test_path+'test_output.txt',output_y)
+
 if __name__ == '__main__':
     train(train_model=True)

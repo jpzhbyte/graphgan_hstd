@@ -1,12 +1,3 @@
-# Characterization of Background-Anomaly Separability With Generative Adversarial Network for Hyperspectral Anomaly Detection, Version 1.0
-# Copyright(c) 2024
-# All Rights Reserved.
-#
-#----------------------------------------------------------------------
-#
-# This is an implementation of the algorithm for Characterization of Background-Anomaly Separability With Generative Adversarial Network for Hyperspectral Anomaly Detection
-#Zhong J, **, et al. "Characterization of background-anomaly separability with generative adversarial network for hyperspectral anomaly detection." 
-#IEEE Transactions on Geoscience and Remote Sensing 59.7 (2020): 6017-6028.
 import tensorflow as tf
 import os
 import matplotlib.pyplot as plt
@@ -36,8 +27,8 @@ n_epochs = 2000
 learning_rate = 1e-4
 beta1 = 0.9
 
-results_path = 'C://Users//jpzho//Desktop//graphlearning_master//Proposed//Train//Results//Spectral//'
-path = 'C://Users//jpzho//Desktop//graphlearning_master//Proposed//Train//Results//Spectral//Saved_models//'#./Train/Results/Spectral/Saved_models/HYDICE
+results_path = './/Train//Results//Spectral//'
+path = './/Train//Results//Spectral//Saved_models//'
 x_input = tf.placeholder(dtype=tf.float32, shape=[batch_size, input_dim], name='Input')
 x_target = tf.placeholder(dtype=tf.float32, shape=[batch_size, input_dim], name='Target')
 real_distribution = tf.placeholder(dtype=tf.float32, shape=[batch_size, z_dim], name='Real_distribution')
@@ -54,10 +45,7 @@ def form_results():
     log_path = results_path  + '/log/HYDICE/'
     feature_path = results_path  + '/feature'
     output_img_path = results_path  + '/output_img'
-#    encoder_weights_path = results_path  + '/encoder_weights'
-#    decoder_weights_path = results_path  + '/decoder_weights'
-#    encoder_bias_path = results_path  + '/encoder_bias'
-#    decoder_bias_path = results_path  + '/decoder_bias'
+
     if not os.path.exists(results_path ):
         os.mkdir(results_path )
         os.mkdir(tensorboard_path)
@@ -73,7 +61,7 @@ def form_results():
 def dense(x, n1, n2, name):
     
    
-    with tf.variable_scope(name, reuse=None):
+    with tf.variable_scope(name, reuse=True):
         
         weights = tf.get_variable("weights", shape=[n1, n2],
                                   initializer=tf.random_normal_initializer(mean=0., stddev=0.01))
@@ -91,7 +79,7 @@ def LeakyRelu(x, leak=0.2, name="LeakyRelu"):
          f2 = 0.5 * (1 - leak)
          return f1 * x + f2 * tf.abs(x)
 
-def encoder(x, reuse=False):
+def encoder(x, reuse=True):
     if reuse:
         
         tf.get_variable_scope().reuse_variables()
@@ -163,8 +151,7 @@ def SAD(x,y,reuse = False):
         return defen
 
 def train(train_model=True):
-#    defen = tf.Variable([0],name = 'defen',dtype=tf.float32)
-    
+
     with tf.variable_scope(tf.get_variable_scope()):
         encoder_output, e_weights_output = encoder(x_input)
         decoder_output,d_weights,d_bias = decoder(encoder_output)
@@ -177,9 +164,8 @@ def train(train_model=True):
         d_real_1 = discriminator_1(real_distribution_1)
         d_fake_1 = discriminator_1(decoder_output, reuse=True)
 
-    # Autoencoder loss
     autoencoder_loss = tf.reduce_mean(tf.square(x_target - decoder_output))
-    # Discrimminator Loss
+
     dc_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_real), logits=d_real))
     dc_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(d_fake), logits=d_fake))
     dc_loss = dc_loss_fake + dc_loss_real
@@ -187,7 +173,7 @@ def train(train_model=True):
     da_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_real_1), logits=d_real_1))
     da_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(d_fake_1), logits=d_fake_1))
     da_loss = da_loss_fake + da_loss_real
-    # Generator loss
+
     generator_loss = tf.reduce_mean(
         tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(d_fake), logits=d_fake))
 
@@ -195,36 +181,30 @@ def train(train_model=True):
     dc_var = [var for var in all_variables if 'dc_' in var.name]
     en_var = [var for var in all_variables if 'e_' in var.name]
     da_var = [var for var in all_variables if 'da_' in var.name]
-    # Optimizers                                            
-#    autoencoder_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(autoencoder_loss, var_list=en_var)
+
     discriminator_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(dc_loss, var_list=dc_var)
     discriminator_1_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(da_loss, var_list=da_var)
     generator_optimizer = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(generator_loss, var_list=en_var)
 
     init = tf.global_variables_initializer()
-    # Saving the model
+
     saver = tf.train.Saver(max_to_keep=100)
     step = 0
     with tf.Session() as sess:
         if train_model:
             tensorboard_path, saved_model_path, log_path,feature_path,output_img_path= form_results()
             sess.run(init)
-#            writer = tf.summary.FileWriter(logdir=tensorboard_path, graph=sess.graph)
-            
+           
             for i in range(n_epochs):
                 n_batches = 1
                 print("------------------Epoch {}/{}------------------".format(i, n_epochs))
                 for b in range(n_batches):
                     z_real_dist = np.random.randn(batch_size, z_dim) * 5.
                     
-#                    batch_xr = data
                     batch_x = data
-#                    batch_a = data_anom
-#                    sess.run(autoencoder_optimizer,feed_dict={x_input: batch_x, x_target: batch_x, a_target: batch_a})
                     sess.run(discriminator_optimizer,
                                 feed_dict={x_input: batch_x, x_target: batch_x, real_distribution: z_real_dist})
                     sess.run(generator_optimizer,feed_dict={x_input: batch_x, x_target: batch_x})
-#                    e_output = sess.run(encoder_output,feed_dict={x_input: batch_x})
                     d_output = sess.run(decoder_output,feed_dict={x_input: batch_x})
                     sess.run(discriminator_1_optimizer,
                                 feed_dict={x_input: d_output, real_distribution_1: batch_x})
@@ -247,14 +227,11 @@ def train(train_model=True):
                         log.write("Generator Loss: {}\n".format(g_loss))
                         
                     np.set_printoptions(threshold=np.inf)
-#                    encoder_path = 'E://BASGAN//train//Results//Spectral//Feature//HYDICE//'
-#                    decoder_path = 'E://BASGAN//train//Results//Spectral//Output_img//HYDICE//'
 
                 step += 1
                 if i % 100 == 0:
                     saver.save(sess, save_path=saved_model_path, global_step=i)
         else:
-            # Get the latest results folder
             print('test')
             test_path = '.\Train\Results\Test_out\HYDICE'
             model_l = []
